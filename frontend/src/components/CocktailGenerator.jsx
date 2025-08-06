@@ -57,6 +57,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      <div className="text-9xl mb-2 text-center">🍸</div>
       <div className="card-elegant mb-8">
         <h2 className="text-3xl font-elegant text-gold-400 mb-6 text-center">
           Créer un Nouveau Cocktail

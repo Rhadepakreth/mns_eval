@@ -99,43 +99,14 @@ const CocktailDetail = ({ cocktail, onBack }) => {
               {cocktail.name}
             </h1>
             <div className="flex items-center space-x-4 text-sm text-gray-400">
-              <span>Cocktail #{cocktail.id}</span>
-              <span>•</span>
               <span>Créé le {formatDate(cocktail.created_at)}</span>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-6xl mb-2">🍸</div>
+            <span>Cocktail #{cocktail.id}</span>
           </div>
         </div>
 
-        {/* Demande originale */}
-        {cocktail.user_prompt && (
-          <div className="mb-8 p-4 bg-gray-800 rounded-lg border-l-4 border-gold-400">
-            <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
-              <span className="mr-2">💭</span>
-              Demande originale
-            </h3>
-            <p className="text-gray-300 italic">
-              "{cocktail.user_prompt}"
-            </p>
-          </div>
-        )}
-
-        {/* Image du cocktail */}
-        {(generatedImage || showDefaultImage) && (
-          <div className="mb-8">
-            <img 
-              src={generatedImage || '/default.webp'} 
-              alt={generatedImage ? `Illustration du cocktail ${cocktail.name}` : 'Image par défaut de cocktail'}
-              className="w-full h-80 object-cover rounded-lg border border-gold-400/30 shadow-lg"
-              onError={() => setImageError('Erreur lors du chargement de l\'image')}
-            />
-            {showDefaultImage && !generatedImage}
-          </div>
-        )}
-        
-        
         {/* Indicateur de génération d'image */}
         {isGeneratingImage && (
           <div className="mb-8 p-6 bg-gray-800 rounded-lg border border-gold-400/30 text-center">
@@ -151,7 +122,36 @@ const CocktailDetail = ({ cocktail, onBack }) => {
 
         {/* Grille principale */}
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Ingrédients */}
+          {/* Colonne gauche : Demande originale et Image */}
+          <div className="space-y-6">
+            {/* Demande originale */}
+            {cocktail.user_prompt && (
+              <div className="p-4 bg-gray-800 rounded-lg border-l-4 border-gold-400">
+                <h3 className="text-lg font-semibold text-white mb-2 flex items-center">
+                  <span className="mr-2">💭</span>
+                  Demande originale
+                </h3>
+                <p className="text-gray-300 italic">
+                  "{cocktail.user_prompt}"
+                </p>
+              </div>
+            )}
+
+            {/* Image du cocktail */}
+            {(generatedImage || showDefaultImage) && (
+              <div className="flex-1">
+                <img 
+                  src={generatedImage || '/default.webp'} 
+                  alt={generatedImage ? `Illustration du cocktail ${cocktail.name}` : 'Image par défaut de cocktail'}
+                  className="w-full h-full min-h-[400px] object-cover rounded-lg border border-gold-400/30 shadow-lg"
+                  onError={() => setImageError('Erreur lors du chargement de l\'image')}
+                />
+                {showDefaultImage && !generatedImage}
+              </div>
+            )}
+          </div>
+
+          {/* Colonne droite : Ingrédients */}
           <div>
             <h3 className="text-2xl font-elegant text-gold-400 mb-4 flex items-center">
               <span className="mr-3">🍸</span>
@@ -193,35 +193,37 @@ const CocktailDetail = ({ cocktail, onBack }) => {
                 Copier tous les ingrédients
               </button>
             )}
-          </div>
-
-          {/* Description */}
-          <div>
-            <h3 className="text-2xl font-elegant text-gold-400 mb-4 flex items-center">
-              <span className="mr-3">📖</span>
-              Description
-            </h3>
-            <div className="prose prose-invert max-w-none">
-              <p className="text-gray-300 leading-relaxed text-lg">
-                {cocktail.description}
-              </p>
+            
+            {/* Description */}
+            <div className="mt-8">
+              <h3 className="text-2xl font-elegant text-gold-400 mb-4 flex items-center">
+                <span className="mr-3">📖</span>
+                Description
+              </h3>
+              <div className="prose prose-invert max-w-none">
+                <p className="text-gray-300 leading-relaxed text-lg">
+                  {cocktail.description}
+                </p>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Section ambiance musicale */}
-      {cocktail.music_ambiance && (
-        <div className="card-elegant">
-          <h3 className="text-xl font-elegant text-gold-400 mb-4 flex items-center">
-            <span className="mr-3">🎵</span>
-            Ambiance Musicale
-          </h3>
-          <p className="text-gray-300 italic leading-relaxed">
-            {cocktail.music_ambiance}
-          </p>
+            
+          </div>
+          
         </div>
-      )}
+        {/* Ambiance musicale */}
+            {cocktail.music_ambiance && (
+              <div className="mt-8 card-elegant">
+                <h3 className="text-2xl font-elegant text-gold-400 mb-4 flex items-center">
+                  <span className="mr-3">🎵</span>
+                  Ambiance Musicale
+                </h3>
+                <p className="text-gray-300 italic leading-relaxed">
+                  {cocktail.music_ambiance}
+                </p>
+              </div>
+            )}
+      </div>
 
     </div>
   )

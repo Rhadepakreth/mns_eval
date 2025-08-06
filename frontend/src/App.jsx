@@ -22,10 +22,10 @@ function App() {
       {/* Header */}
       <header className="border-b border-gold-400 bg-gray-900/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-6">
-          <h1 className="text-4xl md:text-6xl font-elegant text-center text-white mb-2">
+          <h1 className="text-4xl md:text-9xl font-elegant text-right text-white mb-2 yesteryear-regular">
             Le Mixologue Augmenté
           </h1>
-          <p className="text-center text-gold-400 text-lg font-modern">
+          <p className="text-right text-gold-400 text-xl font-modern">
             Créez des cocktails uniques avec l'intelligence artificielle
           </p>
         </div>
