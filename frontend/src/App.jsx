@@ -19,20 +19,10 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {/* Header */}
-      <header className="border-b border-gold-400 bg-gray-900/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-4xl md:text-9xl font-elegant text-right text-white mb-2 yesteryear-regular">
-            Le Mixologue Augmenté
-          </h1>
-          <p className="text-right text-gold-400 text-xl font-modern">
-            Créez des cocktails uniques avec l'intelligence artificielle
-          </p>
-        </div>
-      </header>
+      
 
       {/* Navigation */}
-      <nav className="border-b border-gold-400/30">
+      <nav className="border-b border-t border-gold-400/30">
         <div className="container mx-auto px-4">
           <div className="flex justify-center space-x-8">
             <button
@@ -60,7 +50,7 @@ function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto">
         {activeTab === 'generator' && (
           <CocktailGenerator onCocktailGenerated={handleCocktailGenerated} />
         )}

@@ -57,53 +57,73 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="text-9xl mb-2 text-center">🍸</div>
-      <div className="card-elegant mb-8">
-        <h2 className="text-3xl font-elegant text-gold-400 mb-6 text-center">
-          Créer un Nouveau Cocktail
-        </h2>
-        
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="prompt" className="block text-lg font-medium text-white mb-3">
-              Décrivez le cocktail de vos rêves
-            </label>
-            <textarea
-              id="prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ex: Un cocktail fruité pour une soirée d'été, quelque chose d'épicé pour l'hiver, un drink élégant pour un dîner romantique..."
-              className="input-elegant w-full h-32 resize-none"
-              disabled={isLoading}
-            />
-          </div>
+      
+        {/* Header */}
+      <header>
+        <div className="container mx-auto px-4 py-4">
           
-          {error && (
-            <div className="bg-red-900/50 border border-red-500 rounded-lg p-4">
-              <p className="text-red-300">{error}</p>
+          <h1 className="text-[clamp(6rem,13vw,14rem)] font-elegant text-white yesteryear-regular">
+            <span className="block text-center">
+              <span className="relative inline-block transform -translate-x-10">
+                <span className="text-[clamp(2rem,5vw,6rem)] mr-2 inline-block transform -translate-y-8">Le </span>Mixologue
+              </span>
+              <span className="block transform -translate-y-[8.5vw] translate-x-[8.5vw] text-[clamp(4rem,9vw,8rem)]">🍸Augmenté</span>
+            </span>
+          </h1>
+          <p className="text-center text-gold-400 text-[clamp(0.8rem,1.7vw,1.5rem)] font-modern -mt-[10vw]">
+            Créez des cocktails uniques avec l'intelligence artificielle
+          </p>
+          
+        </div>
+      </header>
+      <div className="">
+        <div className="card-elegant mb-8 w-2/3 mx-auto">
+          <h2 className="text-3xl font-elegant text-white mb-6 text-center">
+            Créer un Nouveau Cocktail
+          </h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="prompt" className="block text-lg font-medium text-gold-400 mb-3">
+                Décrivez le cocktail de vos rêves
+              </label>
+              <textarea
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Ex: Un cocktail fruité pour une soirée d'été, quelque chose d'épicé pour l'hiver, un drink élégant pour un dîner romantique..."
+                className="input-elegant w-full h-32 resize-none"
+                disabled={isLoading}
+              />
             </div>
-          )}
-          
-          <div className="flex justify-center">
-            <button
-              type="submit"
-              disabled={isLoading || !prompt.trim()}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-black"></div>
-                  <span>Création en cours...</span>
-                </>
-              ) : (
-                <>
-                  <span>✨</span>
-                  <span>Créer mon cocktail</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+            
+            {error && (
+              <div className="bg-red-900/50 border border-red-500 rounded-lg p-4">
+                <p className="text-red-300">{error}</p>
+              </div>
+            )}
+            
+            <div className="flex justify-center">
+              <button
+                type="submit"
+                disabled={isLoading || !prompt.trim()}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-black"></div>
+                    <span>Création en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✨</span>
+                    <span>Créer mon cocktail</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
 
       {/* Cocktail généré */}
