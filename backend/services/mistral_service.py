@@ -325,19 +325,14 @@ hyper-réaliste, 4K, composition esthétique
     
     def generate_image(self, prompt: str) -> Optional[str]:
         """
-        Génère une image basée sur le prompt fourni.
-        
-        Note: La génération d'images via l'API Mistral nécessite l'utilisation
-        d'agents avec des outils de génération d'images, ce qui est complexe
-        à implémenter. Pour le moment, cette fonctionnalité retourne None
-        et pourrait être remplacée par une intégration avec un autre service
-        comme DALL-E, Stable Diffusion, ou Midjourney.
+        Génère une image à partir d'un prompt en utilisant l'API Mistral Agents.
+        Cette méthode utilise l'API Agents avec le connecteur image_generation.
         
         Args:
             prompt (str): Prompt de description de l'image
         
         Returns:
-            Optional[str]: URL de l'image générée ou None
+            Optional[str]: Chemin relatif de l'image générée ou None
         """
         if not prompt or not prompt.strip():
             logger.error("Prompt d'image vide")
@@ -345,10 +340,113 @@ hyper-réaliste, 4K, composition esthétique
         
         logger.info(f"Génération d'image pour: {prompt[:100]}...")
         
-        # TODO: Implémenter la génération d'images via l'API Mistral Agents
-        # ou intégrer un autre service de génération d'images
-        logger.warning("Génération d'images non implémentée - nécessite l'API Mistral Agents")
+        try:
+            # Étape 1: Créer un agent avec le connecteur image_generation
+            agent_url = "https://api.mistral.ai/v1/agents"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            
+            agent_data = {
+                "model": "mistral-medium-latest",
+                "name": "Image Generation Agent",
+                "description": "Agent utilisé pour générer des images de cocktails.",
+                "instructions": "Utilise l'outil de génération d'images pour créer des images de cocktails basées sur les descriptions fournies.",
+                "tools": [{"type": "image_generation"}],
+                "completion_args": {
+                    "temperature": 0.3,
+                    "top_p": 0.95
+                }
+            }
+            
+            logger.info("Création de l'agent pour la génération d'image...")
+            agent_response = requests.post(agent_url, headers=headers, json=agent_data, timeout=30)
+            
+            if agent_response.status_code not in [200, 201]:
+                logger.error(f"Erreur lors de la création de l'agent: {agent_response.status_code} - {agent_response.text}")
+                return None
+                
+            agent_result = agent_response.json()
+            agent_id = agent_result.get('id')
+            
+            if not agent_id:
+                logger.error(f"Erreur: ID de l'agent non trouvé dans la réponse - {agent_result}")
+                return None
+            
+            logger.info(f"Agent créé avec l'ID: {agent_id}")
+            
+            # Étape 2: Démarrer une conversation avec l'agent
+            conversation_url = "https://api.mistral.ai/v1/conversations"
+            conversation_data = {
+                "agent_id": agent_id,
+                "inputs": f"Génère une image de cocktail basée sur cette description: {prompt}"
+            }
+            
+            logger.info("Démarrage de la conversation pour générer l'image...")
+            conversation_response = requests.post(conversation_url, headers=headers, json=conversation_data, timeout=60)
+            
+            if conversation_response.status_code != 200:
+                logger.error(f"Erreur lors de la conversation: {conversation_response.status_code} - {conversation_response.text}")
+                return None
+                
+            conversation_result = conversation_response.json()
+            
+            # Étape 3: Extraire le file_id de l'image générée
+            outputs = conversation_result.get('outputs', [])
+            file_id = None
+            
+            for output in outputs:
+                if output.get('type') == 'message.output':
+                    content = output.get('content', [])
+                    for chunk in content:
+                        if chunk.get('type') == 'tool_file' and chunk.get('tool') == 'image_generation':
+                            file_id = chunk.get('file_id')
+                            break
+                    if file_id:
+                        break
+            
+            if not file_id:
+                logger.error(f"Erreur: Aucun file_id trouvé dans la réponse - {conversation_result}")
+                return None
+            
+            logger.info(f"Image générée avec le file_id: {file_id}")
+            
+            # Étape 4: Télécharger l'image et la sauvegarder localement
+            download_url = f"https://api.mistral.ai/v1/files/{file_id}/download"
+            download_response = requests.get(download_url, headers=headers, timeout=30)
+            
+            if download_response.status_code != 200:
+                logger.error(f"Erreur lors du téléchargement: {download_response.status_code} - {download_response.text}")
+                return None
+            
+            # Sauvegarder l'image dans le dossier public du frontend
+            # Créer un nom de fichier unique
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"cocktail_generated_{timestamp}.png"
+            
+            # Chemin vers le dossier public du frontend
+            frontend_public_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'public')
+            file_path = os.path.join(frontend_public_path, filename)
+            
+            # Créer le dossier s'il n'existe pas
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Sauvegarder l'image
+            with open(file_path, 'wb') as f:
+                f.write(download_response.content)
+            
+            logger.info(f"Image sauvegardée: {file_path}")
+            
+            # Retourner l'URL relative pour le frontend
+            return f"/{filename}"
+            
+        except requests.exceptions.Timeout:
+            logger.error("Timeout lors de la génération d'image")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erreur de requête lors de la génération d'image: {str(e)}")
+        except Exception as e:
+            logger.error(f"Erreur inattendue lors de la génération d'image: {str(e)}")
         
-        # Pour le moment, on retourne None pour indiquer que la fonctionnalité
-        # n'est pas disponible
         return None
