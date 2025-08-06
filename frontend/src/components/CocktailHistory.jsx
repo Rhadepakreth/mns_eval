@@ -138,7 +138,7 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
+      <div className="mb-4 mt-4">
         <h2 className="text-3xl font-elegant text-gold-400 text-center mb-2">
           Historique des Cocktails
         </h2>
@@ -148,7 +148,7 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
       </div>
 
       {/* Grille des cocktails */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
         {cocktails.map((cocktail) => (
           <div key={cocktail.id} className="card-elegant hover:border-gold-300 transition-all duration-300 cursor-pointer group"
                onClick={() => onViewCocktail(cocktail)}>
@@ -168,7 +168,7 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
               </h4>
               <div className="text-sm text-gray-300 space-y-1">
                 {Array.isArray(cocktail.ingredients) ? (
-                  cocktail.ingredients.slice(0, 3).map((ingredient, index) => (
+                  cocktail.ingredients.slice(0, 2).map((ingredient, index) => (
                     <div key={index} className="flex items-start">
                       <span className="text-gold-400 mr-2 text-xs">•</span>
                       <span className="truncate">{ingredient}</span>
@@ -181,14 +181,14 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
                 )}
                 {Array.isArray(cocktail.ingredients) && cocktail.ingredients.length > 3 && (
                   <div className="text-xs text-gray-400 italic">
-                    +{cocktail.ingredients.length - 3} autre{cocktail.ingredients.length - 3 > 1 ? 's' : ''} ingrédient{cocktail.ingredients.length - 3 > 1 ? 's' : ''}...
+                    +{cocktail.ingredients.length - 2} autre{cocktail.ingredients.length - 2 > 1 ? 's' : ''} ingrédient{cocktail.ingredients.length - 2 > 1 ? 's' : ''}...
                   </div>
                 )}
               </div>
             </div>
             
             <div className="mb-4">
-              <p className="text-sm text-gray-300 line-clamp-3">
+              <p className="text-sm text-gray-300 line-clamp-2">
                 {cocktail.description}
               </p>
             </div>

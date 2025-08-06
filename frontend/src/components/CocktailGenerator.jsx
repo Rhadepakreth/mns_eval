@@ -195,7 +195,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
                 <span className="mr-2">🎨</span>
                 Inspiration Visuelle
               </h4>
-              <p className="text-gray-300 text-sm bg-gray-800 p-3 rounded-lg">
+              <p className="text-gray-300 text-sm p-3 rounded-lg">
                 {generatedCocktail.image_prompt}
               </p>
             </div>

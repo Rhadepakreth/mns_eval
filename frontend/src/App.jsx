@@ -18,7 +18,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bgcolor">
       
 
       {/* Navigation */}
@@ -69,7 +69,7 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gold-400/30 mt-16">
+      <footer className="border-t border-gold-400/30 mt-4">
         <div className="container mx-auto px-4 py-6 text-center text-gray-400">
           <p className="font-modern">
             Copyright © 2024 Le Mixologue Augmenté. Tous droits réservés.
