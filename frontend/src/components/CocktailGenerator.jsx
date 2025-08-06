@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import CocktailDetail from './CocktailDetail'
 
 const CocktailGenerator = ({ onCocktailGenerated }) => {
   const [prompt, setPrompt] = useState('')
@@ -128,91 +129,10 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
 
       {/* Cocktail généré */}
       {generatedCocktail && (
-        <div className="card-elegant">
-          <div className="flex justify-between items-start mb-6">
-            <h3 className="text-2xl font-elegant text-gold-400">
-              {generatedCocktail.name}
-            </h3>
-            <button
-              onClick={handleNewCocktail}
-              className="text-gray-400 hover:text-white transition-colors"
-              title="Créer un nouveau cocktail"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <h4 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <span className="mr-2">🍸</span>
-                Ingrédients
-              </h4>
-              <ul className="space-y-2">
-                {Array.isArray(generatedCocktail.ingredients) ? (
-                  generatedCocktail.ingredients.map((ingredient, index) => (
-                    <li key={index} className="text-gray-300 flex items-start">
-                      <span className="text-gold-400 mr-2">•</span>
-                      {ingredient}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-400 italic">
-                    Ingrédients non disponibles
-                  </li>
-                )}
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <span className="mr-2">📖</span>
-                Description
-              </h4>
-              <p className="text-gray-300 leading-relaxed">
-                {generatedCocktail.description}
-              </p>
-            </div>
-          </div>
-          
-          {generatedCocktail.music_ambiance && (
-            <div className="mt-6 pt-6 border-t border-gold-400/30">
-              <h4 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <span className="mr-2">🎵</span>
-                Ambiance Musicale
-              </h4>
-              <p className="text-gray-300 italic">
-                {generatedCocktail.music_ambiance}
-              </p>
-            </div>
-          )}
-          
-          {generatedCocktail.image_prompt && (
-            <div className="mt-6 pt-6 border-t border-gold-400/30">
-              <h4 className="text-lg font-semibold text-white mb-3 flex items-center">
-                <span className="mr-2">🎨</span>
-                Inspiration Visuelle
-              </h4>
-              <p className="text-gray-300 text-sm p-3 rounded-lg">
-                {generatedCocktail.image_prompt}
-              </p>
-            </div>
-          )}
-          
-          <div className="mt-6 pt-6 border-t border-gold-400/30 text-center">
-            <p className="text-gray-400 text-sm">
-              Cocktail créé le {new Date(generatedCocktail.created_at).toLocaleDateString('fr-FR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </p>
-          </div>
-        </div>
+        <CocktailDetail 
+          cocktail={generatedCocktail} 
+          onBack={handleNewCocktail}
+        />
       )}
     </div>
   )
