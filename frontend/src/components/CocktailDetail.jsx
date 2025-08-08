@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react'
 
-const CocktailDetail = ({ cocktail, onBack }) => {
+const CocktailDetail = ({ cocktail, onBack, source = 'history' }) => {
   const [generatedImage, setGeneratedImage] = useState(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [imageError, setImageError] = useState(null)
   const [showDefaultImage, setShowDefaultImage] = useState(false)
 
-  // Générer automatiquement l'image au chargement
+  // Gérer l'affichage de l'image au chargement
   useEffect(() => {
-    if (cocktail.image_prompt && !generatedImage) {
+    // Si une image est déjà générée et stockée, l'utiliser
+    if (cocktail.image_path) {
+      setGeneratedImage(cocktail.image_path)
+      setShowDefaultImage(false)
+    } else if (source === 'generator' && cocktail.image_prompt && !generatedImage) {
+      // Générer automatiquement l'image seulement si appelé depuis le générateur
       generateImage()
-    } else if (!cocktail.image_prompt) {
-      // Si pas de prompt d'image, afficher directement l'image par défaut
+    } else {
+      // Si appelé depuis l'historique ou pas de prompt, afficher l'image par défaut
       setShowDefaultImage(true)
     }
-  }, [cocktail.id])
+  }, [cocktail.id, cocktail.image_path, source])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -33,7 +38,7 @@ const CocktailDetail = ({ cocktail, onBack }) => {
   }
 
   const generateImage = async () => {
-    if (!cocktail.image_prompt) return
+    if (!cocktail.id) return
     
     setIsGeneratingImage(true)
     setImageError(null)
@@ -45,7 +50,7 @@ const CocktailDetail = ({ cocktail, onBack }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: cocktail.image_prompt
+          cocktail_id: cocktail.id
         })
       })
       
@@ -58,8 +63,11 @@ const CocktailDetail = ({ cocktail, onBack }) => {
       if (data.image_url) {
         setGeneratedImage(data.image_url)
         setShowDefaultImage(false)
+        
+        // Mettre à jour le cocktail local avec le chemin de l'image
+        cocktail.image_path = data.image_url
       } else {
-        setImageError('Génération d\'images temporairement indisponible. Cette fonctionnalité nécessite une configuration avancée de l\'API Mistral.')
+        setImageError('Génération d\'images temporairement indisponible. Le service DynaPictures n\'est pas configuré.')
         setShowDefaultImage(true)
       }
     } catch (error) {
@@ -107,18 +115,7 @@ const CocktailDetail = ({ cocktail, onBack }) => {
           </div>
         </div>
 
-        {/* Indicateur de génération d'image */}
-        {isGeneratingImage && (
-          <div className="mb-8 p-6 rounded-lg border border-gold-400/30 text-center">
-            <div className="flex items-center justify-center space-x-3">
-              <svg className="animate-spin w-6 h-6 text-gold-400" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span className="text-gold-400">Génération de l'image en cours...</span>
-            </div>
-          </div>
-        )}
+        
 
             {/* Description */}
             <div className="my-4">
@@ -136,7 +133,18 @@ const CocktailDetail = ({ cocktail, onBack }) => {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Colonne gauche : Demande originale et Image */}
           <div className="space-y-6">
-
+            {/* Indicateur de génération d'image */}
+            {isGeneratingImage && (
+              <div className="rounded-lg border border-gold-400/30 text-center flex-1 w-full h-full min-h-[400px]">
+                <div className="flex items-center justify-center w-full h-full space-x-3">
+                  <svg className="animate-spin w-6 h-6 text-gold-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span className="text-gold-400">Génération de l'image en cours...</span>
+                </div>
+              </div>
+            )}
             {/* Image du cocktail */}
             {(generatedImage || showDefaultImage) && (
               <div className="flex-1">

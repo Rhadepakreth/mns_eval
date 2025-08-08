@@ -64,6 +64,7 @@ function App() {
           <CocktailDetail 
             cocktail={selectedCocktail} 
             onBack={() => setActiveTab('history')}
+            source="history"
           />
         )}
       </main>

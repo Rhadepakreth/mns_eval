@@ -132,6 +132,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
         <CocktailDetail 
           cocktail={generatedCocktail} 
           onBack={handleNewCocktail}
+          source="generator"
         />
       )}
     </div>

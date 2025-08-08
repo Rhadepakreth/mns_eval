@@ -53,6 +53,9 @@ def create_models(db):
         image_prompt = db.Column(db.Text, nullable=True,
                                 comment="Prompt pour génération d'image (optionnel)")
         
+        image_path = db.Column(db.String(500), nullable=True,
+                              comment="Chemin relatif de l'image générée (pour éviter la régénération)")
+        
         # Métadonnées
         user_prompt = db.Column(db.Text, nullable=False,
                                comment="Demande originale de l'utilisateur")
@@ -133,6 +136,7 @@ def create_models(db):
                 'description': self.description,
                 'music_ambiance': self.music_ambiance,
                 'image_prompt': self.image_prompt,
+                'image_path': self.image_path,
                 'user_prompt': self.user_prompt,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None

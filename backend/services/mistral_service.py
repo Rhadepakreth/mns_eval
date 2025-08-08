@@ -17,6 +17,7 @@ import requests
 import logging
 from typing import Dict, Optional, Any
 from datetime import datetime
+from .dynapictures_service import DynaPicturesService
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,14 @@ class MistralService:
         self.timeout = 30  # Timeout en secondes
         self.max_retries = 3
         
+        # Initialisation du service DynaPictures pour la génération d'images
+        try:
+            self.dynapictures_service = DynaPicturesService()
+            logger.info("Service DynaPictures initialisé avec succès")
+        except ValueError as e:
+            logger.warning(f"Service DynaPictures non disponible: {e}")
+            self.dynapictures_service = None
+        
         logger.info(f"Service Mistral initialisé avec le modèle: {self.model}")
     
     def _build_system_prompt(self) -> str:
@@ -71,7 +80,7 @@ Pour chaque demande, tu dois générer une fiche cocktail complète au format JS
   ],
   "description": "Histoire courte et engageante du cocktail (2-3 phrases max)",
   "music_ambiance": "Suggestion d'ambiance musicale adaptée au cocktail",
-  "image_prompt": "Prompt détaillé pour générer une image du cocktail avec MidJourney/SDXL"
+  "image_prompt": "Prompt détaillé pour générer une image du cocktail avec SDXL,précise que le verre doit être visible entièrement et le background noir (60 tokens max)"
 }
 
 Règles importantes :
@@ -323,130 +332,25 @@ hyper-réaliste, 4K, composition esthétique
             logger.error(f"Erreur lors du test de connexion: {str(e)}")
             return False
     
-    def generate_image(self, prompt: str) -> Optional[str]:
+    def generate_image(self, cocktail_data: Dict[str, Any]) -> Optional[str]:
         """
-        Génère une image à partir d'un prompt en utilisant l'API Mistral Agents.
-        Cette méthode utilise l'API Agents avec le connecteur image_generation.
+        Génère une image de cocktail en utilisant DynaPictures.
         
         Args:
-            prompt (str): Prompt de description de l'image
+            cocktail_data: Données complètes du cocktail
         
         Returns:
             Optional[str]: Chemin relatif de l'image générée ou None
         """
-        if not prompt or not prompt.strip():
-            logger.error("Prompt d'image vide")
+        if not cocktail_data:
+            logger.error("Données de cocktail manquantes pour la génération d'image")
             return None
         
-        logger.info(f"Génération d'image pour: {prompt[:100]}...")
+        # Utiliser DynaPictures si disponible
+        if self.dynapictures_service:
+            logger.info("Génération d'image avec DynaPictures")
+            return self.dynapictures_service.generate_cocktail_image(cocktail_data)
         
-        try:
-            # Étape 1: Créer un agent avec le connecteur image_generation
-            agent_url = "https://api.mistral.ai/v1/agents"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            
-            agent_data = {
-                "model": "mistral-medium-latest",
-                "name": "Image Generation Agent",
-                "description": "Agent utilisé pour générer des images de cocktails.",
-                "instructions": "Utilise l'outil de génération d'images pour créer des images de cocktails basées sur les descriptions fournies.",
-                "tools": [{"type": "image_generation"}],
-                "completion_args": {
-                    "temperature": 0.3,
-                    "top_p": 0.95
-                }
-            }
-            
-            logger.info("Création de l'agent pour la génération d'image...")
-            agent_response = requests.post(agent_url, headers=headers, json=agent_data, timeout=30)
-            
-            if agent_response.status_code not in [200, 201]:
-                logger.error(f"Erreur lors de la création de l'agent: {agent_response.status_code} - {agent_response.text}")
-                return None
-                
-            agent_result = agent_response.json()
-            agent_id = agent_result.get('id')
-            
-            if not agent_id:
-                logger.error(f"Erreur: ID de l'agent non trouvé dans la réponse - {agent_result}")
-                return None
-            
-            logger.info(f"Agent créé avec l'ID: {agent_id}")
-            
-            # Étape 2: Démarrer une conversation avec l'agent
-            conversation_url = "https://api.mistral.ai/v1/conversations"
-            conversation_data = {
-                "agent_id": agent_id,
-                "inputs": f"Génère une image de cocktail basée sur cette description: {prompt}"
-            }
-            
-            logger.info("Démarrage de la conversation pour générer l'image...")
-            conversation_response = requests.post(conversation_url, headers=headers, json=conversation_data, timeout=60)
-            
-            if conversation_response.status_code != 200:
-                logger.error(f"Erreur lors de la conversation: {conversation_response.status_code} - {conversation_response.text}")
-                return None
-                
-            conversation_result = conversation_response.json()
-            
-            # Étape 3: Extraire le file_id de l'image générée
-            outputs = conversation_result.get('outputs', [])
-            file_id = None
-            
-            for output in outputs:
-                if output.get('type') == 'message.output':
-                    content = output.get('content', [])
-                    for chunk in content:
-                        if chunk.get('type') == 'tool_file' and chunk.get('tool') == 'image_generation':
-                            file_id = chunk.get('file_id')
-                            break
-                    if file_id:
-                        break
-            
-            if not file_id:
-                logger.error(f"Erreur: Aucun file_id trouvé dans la réponse - {conversation_result}")
-                return None
-            
-            logger.info(f"Image générée avec le file_id: {file_id}")
-            
-            # Étape 4: Télécharger l'image et la sauvegarder localement
-            download_url = f"https://api.mistral.ai/v1/files/{file_id}/download"
-            download_response = requests.get(download_url, headers=headers, timeout=30)
-            
-            if download_response.status_code != 200:
-                logger.error(f"Erreur lors du téléchargement: {download_response.status_code} - {download_response.text}")
-                return None
-            
-            # Sauvegarder l'image dans le dossier public du frontend
-            # Créer un nom de fichier unique
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"cocktail_generated_{timestamp}.png"
-            
-            # Chemin vers le dossier public du frontend
-            frontend_public_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'frontend', 'public')
-            file_path = os.path.join(frontend_public_path, filename)
-            
-            # Créer le dossier s'il n'existe pas
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Sauvegarder l'image
-            with open(file_path, 'wb') as f:
-                f.write(download_response.content)
-            
-            logger.info(f"Image sauvegardée: {file_path}")
-            
-            # Retourner l'URL relative pour le frontend
-            return f"/{filename}"
-            
-        except requests.exceptions.Timeout:
-            logger.error("Timeout lors de la génération d'image")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erreur de requête lors de la génération d'image: {str(e)}")
-        except Exception as e:
-            logger.error(f"Erreur inattendue lors de la génération d'image: {str(e)}")
-        
-        return None
+        # Fallback: générer une image par défaut
+        logger.warning("Service DynaPictures non disponible, utilisation de l'image par défaut")
+        return "/default.webp"

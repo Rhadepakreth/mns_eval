@@ -11,7 +11,7 @@ Date: 2024
 """
 
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
@@ -188,16 +188,7 @@ def get_cocktail(cocktail_id):
         
         return jsonify({
             'success': True,
-            'cocktail': {
-                'id': cocktail.id,
-                'name': cocktail.name,
-                'ingredients': cocktail.ingredients,
-                'description': cocktail.description,
-                'music_ambiance': cocktail.music_ambiance,
-                'image_prompt': cocktail.image_prompt,
-                'user_prompt': cocktail.user_prompt,
-                'created_at': cocktail.created_at.isoformat()
-            }
+            'cocktail': cocktail.to_dict()
         })
         
     except Exception as e:
@@ -239,11 +230,11 @@ def delete_cocktail(cocktail_id):
 @app.route('/api/cocktails/generate-image', methods=['POST'])
 def generate_image():
     """
-    Génère une image basée sur un prompt via l'API Mistral.
+    Génère une image pour un cocktail spécifique via DynaPictures.
     
     Expected JSON:
         {
-            "prompt": "Description de l'image à générer"
+            "cocktail_id": 123
         }
     
     Returns:
@@ -252,37 +243,56 @@ def generate_image():
     try:
         # Validation des données d'entrée
         data = request.get_json()
-        if not data or 'prompt' not in data:
+        if not data or 'cocktail_id' not in data:
             return jsonify({
                 'success': False,
-                'error': 'Le prompt est requis'
+                'error': 'L\'ID du cocktail est requis'
             }), 400
         
-        prompt = data['prompt'].strip()
-        if not prompt:
+        cocktail_id = data['cocktail_id']
+        if not isinstance(cocktail_id, int) or cocktail_id <= 0:
             return jsonify({
                 'success': False,
-                'error': 'Le prompt ne peut pas être vide'
+                'error': 'L\'ID du cocktail doit être un entier positif'
             }), 400
         
-        logger.info(f"Génération d'image demandée pour: {prompt[:100]}...")
+        # Récupération du cocktail depuis la base de données
+        cocktail = Cocktail.query.get(cocktail_id)
+        if not cocktail:
+            return jsonify({
+                'success': False,
+                'error': 'Cocktail non trouvé'
+            }), 404
         
-        # Génération de l'image via Mistral
-        image_url = mistral_service.generate_image(prompt)
+        logger.info(f"Génération d'image demandée pour le cocktail: {cocktail.name} (ID: {cocktail_id})")
+        
+        # Conversion du cocktail en dictionnaire pour le service
+        cocktail_data = cocktail.to_dict()
+        
+        # Génération de l'image via DynaPictures
+        image_url = mistral_service.generate_image(cocktail_data)
         
         if image_url:
-            logger.info("Image générée avec succès")
+            logger.info(f"Image générée avec succès pour {cocktail.name}: {image_url}")
+            
+            # Optionnel: Sauvegarder le chemin de l'image dans la base de données
+            # pour éviter de régénérer à chaque fois
+            if hasattr(cocktail, 'image_path'):
+                cocktail.image_path = image_url
+                db.session.commit()
+            
             return jsonify({
                 'success': True,
                 'image_url': image_url,
-                'prompt': prompt
+                'cocktail_id': cocktail_id,
+                'cocktail_name': cocktail.name
             })
         else:
-            logger.warning("Génération d'image non disponible")
+            logger.warning(f"Génération d'image non disponible pour {cocktail.name}")
             return jsonify({
                 'success': False,
                 'error': 'Génération d\'images temporairement indisponible',
-                'message': 'Cette fonctionnalité nécessite une configuration avancée de l\'API Mistral avec les agents.'
+                'message': 'Le service DynaPictures n\'est pas configuré ou indisponible.'
             }), 503  # Service Unavailable
             
     except Exception as e:
@@ -291,6 +301,26 @@ def generate_image():
             'success': False,
             'error': 'Erreur interne du serveur'
         }), 500
+
+@app.route('/<path:filename>')
+def serve_static_files(filename):
+    """
+    Sert les fichiers statiques (images) depuis le répertoire frontend/public.
+    
+    Args:
+        filename (str): Nom du fichier à servir
+    
+    Returns:
+        File: Fichier statique ou erreur 404
+    """
+    try:
+        # Chemin vers le répertoire public du frontend
+        static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'public')
+        return send_from_directory(static_dir, filename)
+    except FileNotFoundError:
+        return jsonify({
+            'error': f'Fichier {filename} non trouvé'
+        }), 404
 
 @app.errorhandler(404)
 def not_found(error):
