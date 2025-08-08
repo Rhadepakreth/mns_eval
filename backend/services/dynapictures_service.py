@@ -3,8 +3,9 @@
 """
 Service de génération d'images avec Stable Diffusion pour Le Mixologue Augmenté
 
-Gère la génération d'images de cocktails en utilisant Stable Diffusion v1.5
-avec authentification Hugging Face. Remplace l'ancien service DynaPictures.
+Gère la génération d'images de cocktails en utilisant des modèles Stable Diffusion
+avancés (SDXL, SD 2.1, SD 1.5) avec authentification Hugging Face.
+Supporte la sélection automatique du meilleur modèle selon les ressources disponibles.
 
 Auteur: Assistant IA
 Date: 2024
@@ -13,9 +14,14 @@ Date: 2024
 import os
 import logging
 import torch
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 from datetime import datetime
-from diffusers import DiffusionPipeline
+from diffusers import (
+    DiffusionPipeline, 
+    StableDiffusionXLPipeline,
+    StableDiffusionPipeline,
+    EulerDiscreteScheduler
+)
 from huggingface_hub import login
 from PIL import Image
 import re
@@ -24,17 +30,51 @@ logger = logging.getLogger(__name__)
 
 class DynaPicturesService:
     """
-    Service de génération d'images avec Stable Diffusion v1.5.
+    Service de génération d'images avec Stable Diffusion avancé.
     
-    Utilise le modèle Stable Diffusion v1.5 de RunwayML pour générer
-    des images de cocktails basées sur les descriptions et prompts fournis.
-    Nécessite une authentification Hugging Face valide.
+    Supporte plusieurs modèles Stable Diffusion (SDXL, SD 2.1, SD 1.5) avec
+    sélection automatique du meilleur modèle selon les ressources disponibles.
+    Optimise automatiquement les paramètres selon le modèle choisi.
     """
     
-    def __init__(self):
+    # Configuration des modèles disponibles
+    MODELS_CONFIG = {
+        "sdxl": {
+            "id": "stabilityai/stable-diffusion-xl-base-1.0",
+            "pipeline_class": StableDiffusionXLPipeline,
+            "resolution": (1024, 1024),
+            "min_vram_gb": 10,
+            "steps": 25,
+            "guidance_scale": 7.5,
+            "description": "SDXL 1.0 - Qualité supérieure, résolution 1024x1024"
+        },
+        "sd21": {
+            "id": "stabilityai/stable-diffusion-2-1",
+            "pipeline_class": StableDiffusionPipeline,
+            "resolution": (768, 768),
+            "min_vram_gb": 6,
+            "steps": 20,
+            "guidance_scale": 7.5,
+            "description": "SD 2.1 - Bon équilibre qualité/performance, résolution 768x768"
+        },
+        "sd15": {
+            "id": "runwayml/stable-diffusion-v1-5",
+            "pipeline_class": StableDiffusionPipeline,
+            "resolution": (512, 512),
+            "min_vram_gb": 4,
+            "steps": 15,
+            "guidance_scale": 7.0,
+            "description": "SD 1.5 - Rapide et compatible, résolution 512x512"
+        }
+    }
+    
+    def __init__(self, preferred_model: str = "auto"):
         """
-        Initialise le service Stable Diffusion avec authentification Hugging Face.
+        Initialise le service Stable Diffusion avec sélection automatique du modèle.
         
+        Args:
+            preferred_model: Modèle préféré ("sdxl", "sd21", "sd15", "auto")
+                           "auto" sélectionne automatiquement selon les ressources
         """
         self.hf_token = os.getenv('HUGGINGFACE_TOKEN')
         if not self.hf_token or self.hf_token == '<VOTRE-TOKEN-HUGGINGFACE>':
@@ -46,8 +86,13 @@ class DynaPicturesService:
         
         self.pipe = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        # Utilisation d'un modèle accessible sans restriction
-        self.model_id = "runwayml/stable-diffusion-v1-5"
+        self.current_model = None
+        self.model_config = None
+        
+        # Sélection du modèle optimal
+        self.selected_model = self._select_optimal_model(preferred_model)
+        self.model_config = self.MODELS_CONFIG[self.selected_model]
+        logger.info(f"🎯 Modèle sélectionné: {self.selected_model} - {self.model_config['description']}")
         
         # Authentification Hugging Face
         try:
@@ -60,39 +105,146 @@ class DynaPicturesService:
         # Initialisation du pipeline (lazy loading)
         self._initialize_pipeline()
     
+    def _select_optimal_model(self, preferred_model: str) -> str:
+        """
+        Sélectionne le modèle optimal selon les ressources disponibles.
+        
+        Args:
+            preferred_model: Modèle préféré ou "auto" pour sélection automatique
+            
+        Returns:
+            str: Clé du modèle sélectionné
+        """
+        if preferred_model != "auto" and preferred_model in self.MODELS_CONFIG:
+            logger.info(f"🎯 Utilisation du modèle spécifié: {preferred_model}")
+            return preferred_model
+        
+        # Sélection automatique basée sur les ressources
+        available_vram = self._get_available_vram()
+        logger.info(f"💾 VRAM disponible estimée: {available_vram:.1f} GB")
+        
+        # Ordre de préférence: SDXL > SD2.1 > SD1.5
+        for model_key in ["sdxl", "sd21", "sd15"]:
+            model_config = self.MODELS_CONFIG[model_key]
+            if available_vram >= model_config["min_vram_gb"]:
+                logger.info(f"✅ Modèle {model_key} compatible avec {available_vram:.1f} GB VRAM")
+                return model_key
+        
+        # Fallback sur SD1.5 si aucun modèle n'est compatible
+        logger.warning("⚠️ VRAM insuffisante, utilisation de SD1.5 par défaut")
+        return "sd15"
+    
+    def _get_available_vram(self) -> float:
+        """
+        Estime la VRAM disponible.
+        
+        Returns:
+            float: VRAM disponible en GB
+        """
+        if not torch.cuda.is_available():
+            return 0.0
+        
+        try:
+            # Obtenir la VRAM totale et utilisée
+            total_memory = torch.cuda.get_device_properties(0).total_memory
+            allocated_memory = torch.cuda.memory_allocated(0)
+            available_memory = total_memory - allocated_memory
+            
+            # Conversion en GB avec marge de sécurité (80% de la VRAM disponible)
+            available_gb = (available_memory / (1024**3)) * 0.8
+            
+            return max(0.0, available_gb)
+        except Exception as e:
+            logger.warning(f"⚠️ Impossible d'estimer la VRAM: {e}")
+            # Estimation conservative pour CPU ou erreur
+            return 4.0 if self.device == "cuda" else 0.0
+    
     def _initialize_pipeline(self):
         """
-        Initialise le pipeline Stable Diffusion 3.5 Large.
+        Initialise le pipeline Stable Diffusion selon le modèle sélectionné.
         
         Utilise le lazy loading pour éviter de charger le modèle si non nécessaire.
-        Configure automatiquement le device (CUDA si disponible, sinon CPU).
+        Configure automatiquement le device et les optimisations selon le modèle.
         """
         try:
-            logger.info(f"🔄 Initialisation du pipeline Stable Diffusion v1.5 sur {self.device}...")
+            model_id = self.model_config["id"]
+            pipeline_class = self.model_config["pipeline_class"]
             
-            # Configuration optimisée selon le device
+            logger.info(f"🔄 Initialisation du pipeline {self.selected_model} ({model_id}) sur {self.device}...")
+            
+            # Configuration optimisée selon le device et le modèle
             if self.device == "cuda":
-                self.pipe = DiffusionPipeline.from_pretrained(
-                    self.model_id,
+                # Configuration CUDA avec optimisations
+                self.pipe = pipeline_class.from_pretrained(
+                    model_id,
                     torch_dtype=torch.float16,
-                    use_safetensors=True
+                    use_safetensors=True,
+                    variant="fp16" if self.selected_model == "sdxl" else None
                 ).to(self.device)
                 
-                # Optimisations CUDA
-                self.pipe.enable_model_cpu_offload()
-                self.pipe.enable_attention_slicing()
+                # Optimisations spécifiques selon le modèle
+                if self.selected_model == "sdxl":
+                    # SDXL nécessite plus de VRAM, optimisations agressives
+                    self.pipe.enable_model_cpu_offload()
+                    self.pipe.enable_attention_slicing()
+                    # Scheduler optimisé pour SDXL
+                    self.pipe.scheduler = EulerDiscreteScheduler.from_config(
+                        self.pipe.scheduler.config
+                    )
+                else:
+                    # SD 2.1 et 1.5 - optimisations standard
+                    self.pipe.enable_attention_slicing()
+                    if self.selected_model == "sd21":
+                        self.pipe.enable_model_cpu_offload()
+                
             else:
                 logger.warning("⚠️ CUDA non disponible, utilisation du CPU (plus lent)")
-                self.pipe = DiffusionPipeline.from_pretrained(
-                    self.model_id,
+                self.pipe = pipeline_class.from_pretrained(
+                    model_id,
                     torch_dtype=torch.float32
                 ).to(self.device)
             
-            logger.info("✅ Pipeline Stable Diffusion initialisé avec succès")
+            self.current_model = self.selected_model
+            logger.info(f"✅ Pipeline {self.selected_model} initialisé avec succès")
             
         except Exception as e:
-            logger.error(f"❌ Erreur lors de l'initialisation du pipeline: {e}")
-            raise RuntimeError(f"Impossible d'initialiser Stable Diffusion: {e}")
+            logger.error(f"❌ Erreur lors de l'initialisation du pipeline {self.selected_model}: {e}")
+            # Fallback vers SD1.5 en cas d'erreur
+            if self.selected_model != "sd15":
+                logger.info("🔄 Tentative de fallback vers SD1.5...")
+                self._fallback_to_sd15()
+            else:
+                raise RuntimeError(f"Impossible d'initialiser Stable Diffusion: {e}")
+    
+    def _fallback_to_sd15(self):
+        """
+        Fallback vers SD1.5 en cas d'échec du modèle principal.
+        """
+        try:
+            self.selected_model = "sd15"
+            self.model_config = self.MODELS_CONFIG["sd15"]
+            
+            logger.info("🔄 Initialisation du fallback SD1.5...")
+            
+            if self.device == "cuda":
+                self.pipe = StableDiffusionPipeline.from_pretrained(
+                    self.model_config["id"],
+                    torch_dtype=torch.float16,
+                    use_safetensors=True
+                ).to(self.device)
+                self.pipe.enable_attention_slicing()
+            else:
+                self.pipe = StableDiffusionPipeline.from_pretrained(
+                    self.model_config["id"],
+                    torch_dtype=torch.float32
+                ).to(self.device)
+            
+            self.current_model = "sd15"
+            logger.info("✅ Fallback SD1.5 initialisé avec succès")
+            
+        except Exception as e:
+            logger.error(f"❌ Échec du fallback SD1.5: {e}")
+            raise RuntimeError(f"Impossible d'initialiser le fallback SD1.5: {e}")
     
     def _build_cocktail_prompt(self, cocktail_data: Dict[str, Any]) -> str:
         """
@@ -200,6 +352,25 @@ class DynaPicturesService:
         
         return "elegant bar atmosphere"
     
+    def _get_negative_prompt(self) -> str:
+        """
+        Retourne le prompt négatif optimisé selon le modèle utilisé.
+        
+        Returns:
+            str: Prompt négatif adapté au modèle
+        """
+        base_negative = "blurry, low quality, distorted, ugly, bad anatomy"
+        
+        if self.current_model == "sdxl":
+            # SDXL bénéficie de prompts négatifs plus détaillés
+            return f"{base_negative}, worst quality, low resolution, jpeg artifacts, watermark, signature, text, logo"
+        elif self.current_model == "sd21":
+            # SD 2.1 avec prompts négatifs modérés
+            return f"{base_negative}, worst quality, low resolution, jpeg artifacts"
+        else:
+            # SD 1.5 avec prompts négatifs simples
+            return base_negative
+    
     def _sanitize_filename(self, cocktail_name: str) -> str:
         """
         Nettoie le nom du cocktail pour créer un nom de fichier valide.
@@ -223,7 +394,7 @@ class DynaPicturesService:
     
     def generate_cocktail_image(self, cocktail_data: Dict[str, Any]) -> Optional[str]:
         """
-        Génère une image de cocktail en utilisant Stable Diffusion 3.5 Large.
+        Génère une image de cocktail en utilisant le modèle Stable Diffusion sélectionné.
         
         Args:
             cocktail_data: Dictionnaire contenant les données du cocktail
@@ -244,26 +415,34 @@ class DynaPicturesService:
             
             cocktail_name = cocktail_data.get('name', 'Cocktail Inconnu')
             logger.info(f"🎨 Génération d'image pour le cocktail: {cocktail_name}")
+            logger.info(f"📊 Modèle utilisé: {self.current_model} - {self.model_config['description']}")
             
             # Construction du prompt optimisé
             prompt = self._build_cocktail_prompt(cocktail_data)
             
             # Génération de l'image
-            logger.info("🔄 Génération en cours avec Stable Diffusion 3.5 Large...")
+            logger.info(f"🔄 Génération en cours avec {self.current_model}...")
             
-            # Paramètres ultra-conservateurs pour éviter les erreurs
+            # Paramètres optimisés selon le modèle
+            width, height = self.model_config["resolution"]
             generation_params = {
                 "prompt": prompt,
-                "num_inference_steps": 15,  # Encore plus réduit
-                "guidance_scale": 7.0,      # Valeur standard
-                "width": 512,
-                "height": 512,
-                "negative_prompt": "blurry, low quality, distorted",  # Améliore la qualité
-                "num_images_per_prompt": 1  # Explicitement une seule image
+                "num_inference_steps": self.model_config["steps"],
+                "guidance_scale": self.model_config["guidance_scale"],
+                "width": width,
+                "height": height,
+                "negative_prompt": self._get_negative_prompt(),
+                "num_images_per_prompt": 1
             }
             
-            # Pas de generator pour éviter les erreurs d'index
-            # Le modèle utilisera sa propre graine aléatoire
+            # Paramètres spécifiques pour SDXL
+            if self.current_model == "sdxl":
+                generation_params.update({
+                    "denoising_end": 0.8,  # Utilise le refiner implicitement
+                    "output_type": "pil"
+                })
+            
+            logger.info(f"⚙️ Paramètres: {width}x{height}, {self.model_config['steps']} étapes, guidance {self.model_config['guidance_scale']}")
             
             # Génération avec gestion d'erreur robuste
             result = self.pipe(**generation_params)

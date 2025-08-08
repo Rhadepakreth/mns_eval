@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import CocktailDetail from './CocktailDetail'
+import CocktailDetail from './cocktaildetail'
 
 const CocktailGenerator = ({ onCocktailGenerated }) => {
   const [prompt, setPrompt] = useState('')
@@ -68,7 +68,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
               <span className="relative inline-block transform -translate-x-10">
                 <span className="text-[clamp(2rem,5vw,6rem)] mr-2 inline-block transform -translate-y-8">Le </span>Mixologue
               </span>
-              <span className="block transform -translate-y-[8.5vw] translate-x-[8.5vw] text-[clamp(4rem,9vw,8rem)]">🍸Augmenté</span>
+              <span className="block transform -translate-y-[10.5vw] translate-x-[8.2vw] text-[clamp(4rem,9vw,8rem)]"><span className='text-[clamp(5rem,12vw,10rem)] inline-block transform translate-x-[1vw] translate-y-[1vw]'>🍹</span>Augmenté</span>
             </span>
           </h1>
           <p className="text-center text-gold-400 text-[clamp(0.8rem,1.7vw,1.5rem)] font-modern -mt-[10vw]">
