@@ -152,9 +152,17 @@ const CocktailDetail = ({ cocktail, onBack, source = 'history' }) => {
                   src={generatedImage || '/default.webp'} 
                   alt={generatedImage ? `Illustration du cocktail ${cocktail.name}` : 'Image par défaut de cocktail'}
                   className="w-full h-full min-h-[400px] object-cover rounded-lg border border-gold-400/30 shadow-lg"
-                  onError={() => setImageError('Erreur lors du chargement de l\'image')}
+                  onError={(e) => {
+                    // Si l'image principale échoue, basculer vers l'image par défaut
+                    if (e.target.src !== '/default.webp') {
+                      e.target.src = '/default.webp'
+                      setShowDefaultImage(true)
+                      setGeneratedImage(null)
+                    } else {
+                      setImageError('Erreur lors du chargement de l\'image')
+                    }
+                  }}
                 />
-                {showDefaultImage && !generatedImage}
               </div>
             )}
           </div>
