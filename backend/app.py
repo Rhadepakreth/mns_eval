@@ -17,25 +17,43 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 import logging
 from datetime import datetime
+from werkzeug.exceptions import BadRequest
+
+# Import du module de sécurité
+from security import (
+    SecurityConfig, SecurityValidator, rate_limit, 
+    add_security_headers, log_security_event, secure_error_handler
+)
 
 # Chargement des variables d'environnement
 load_dotenv()
 
-# Configuration du logging
-logging.basicConfig(level=logging.INFO)
+# Configuration du logging sécurisé
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log') if os.getenv('LOG_TO_FILE') == 'true' else logging.NullHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialisation de l'application Flask
 app = Flask(__name__)
 
-# Configuration de l'application
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///cocktails.db')
+# Configuration sécurisée de l'application
+app.config['SECRET_KEY'] = SecurityConfig.get_secret_key()
+app.config['SQLALCHEMY_DATABASE_URI'] = SecurityConfig.get_database_url()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 
-# Configuration CORS pour permettre les requêtes depuis React
-cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:5176').split(',')
-CORS(app, origins=cors_origins)
+# Configuration CORS sécurisée
+cors_origins = SecurityConfig.get_cors_origins()
+CORS(app, origins=cors_origins, supports_credentials=False)
 
 # Initialisation de la base de données
 db = SQLAlchemy(app)
@@ -49,6 +67,12 @@ from services.mistral_service import MistralService
 
 # Initialisation du service Mistral
 mistral_service = MistralService()
+
+# Middleware de sécurité
+@app.after_request
+def after_request(response):
+    """Ajoute les headers de sécurité à toutes les réponses."""
+    return add_security_headers(response)
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -94,6 +118,7 @@ def api_status():
         }), 500
 
 @app.route('/api/cocktails/generate', methods=['POST'])
+@rate_limit(limit=5, window=60)  # 5 requêtes par minute
 def generate_cocktail():
     """
     Génère un nouveau cocktail basé sur la demande de l'utilisateur.
@@ -110,14 +135,18 @@ def generate_cocktail():
         # Validation des données d'entrée
         data = request.get_json()
         if not data or 'prompt' not in data:
+            log_security_event('INVALID_REQUEST', 'Champ prompt manquant')
             return jsonify({
                 'error': 'Le champ "prompt" est requis'
             }), 400
         
-        user_prompt = data['prompt'].strip()
-        if not user_prompt:
+        # Validation et sanitisation sécurisée du prompt
+        try:
+            user_prompt = SecurityValidator.sanitize_prompt(data['prompt'])
+        except ValueError as e:
+            log_security_event('INVALID_INPUT', f'Prompt invalide: {str(e)}')
             return jsonify({
-                'error': 'Le prompt ne peut pas être vide'
+                'error': str(e)
             }), 400
         
         logger.info(f"Génération d'un cocktail pour le prompt: {user_prompt[:100]}...")
@@ -157,6 +186,7 @@ def generate_cocktail():
         }), 500
 
 @app.route('/api/cocktails', methods=['GET'])
+@rate_limit(limit=20, window=60)  # 20 requêtes par minute
 def get_cocktails():
     """
     Récupère la liste des cocktails générés (historique).
@@ -169,9 +199,10 @@ def get_cocktails():
         dict: Liste paginée des cocktails
     """
     try:
-        # Paramètres de pagination
-        page = request.args.get('page', 1, type=int)
-        per_page = min(request.args.get('per_page', 10, type=int), 50)
+        # Paramètres de pagination sécurisés
+        page_param = request.args.get('page', 1)
+        per_page_param = request.args.get('per_page', 10)
+        page, per_page = SecurityValidator.validate_pagination_params(page_param, per_page_param)
         
         # Récupération des cocktails avec pagination
         cocktails_query = Cocktail.query.order_by(Cocktail.created_at.desc())
@@ -202,6 +233,7 @@ def get_cocktails():
         }), 500
 
 @app.route('/api/cocktails/<int:cocktail_id>', methods=['GET'])
+@rate_limit(limit=30, window=60)  # 30 requêtes par minute
 def get_cocktail(cocktail_id):
     """
     Récupère un cocktail spécifique par son ID.
@@ -213,6 +245,15 @@ def get_cocktail(cocktail_id):
         JSON: Données du cocktail ou erreur 404
     """
     try:
+        # Validation sécurisée de l'ID
+        try:
+            cocktail_id = SecurityValidator.validate_cocktail_id(cocktail_id)
+        except ValueError as e:
+            log_security_event('INVALID_COCKTAIL_ID', f'ID invalide: {cocktail_id}')
+            return jsonify({
+                'error': str(e)
+            }), 400
+        
         cocktail = Cocktail.query.get_or_404(cocktail_id)
         
         return jsonify({
@@ -228,6 +269,7 @@ def get_cocktail(cocktail_id):
         }), 500
 
 @app.route('/api/cocktails/<int:cocktail_id>', methods=['DELETE'])
+@rate_limit(limit=10, window=60)  # 10 suppressions par minute
 def delete_cocktail(cocktail_id):
     """
     Supprime un cocktail spécifique par son ID et son image associée.
@@ -239,28 +281,42 @@ def delete_cocktail(cocktail_id):
         JSON: Confirmation de suppression ou erreur
     """
     try:
+        # Validation sécurisée de l'ID
+        try:
+            cocktail_id = SecurityValidator.validate_cocktail_id(cocktail_id)
+        except ValueError as e:
+            log_security_event('INVALID_COCKTAIL_ID', f'ID invalide pour suppression: {cocktail_id}')
+            return jsonify({
+                'error': str(e)
+            }), 400
+        
         cocktail = Cocktail.query.get_or_404(cocktail_id)
         
-        # Supprimer l'image associée si elle existe
+        # Suppression sécurisée de l'image associée si elle existe
         image_deleted = False
         if cocktail.image_path:
             try:
-                # Construire le chemin complet vers l'image
-                # Le chemin stocké est relatif (ex: "/cocktail_name.png")
-                # Le dossier public est dans frontend/public/
-                image_filename = cocktail.image_path.lstrip('/')
-                image_full_path = os.path.join(
-                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    'frontend', 'public', image_filename
-                )
-                
-                # Vérifier que le fichier existe et le supprimer
-                if os.path.exists(image_full_path):
-                    os.remove(image_full_path)
-                    image_deleted = True
-                    logger.info(f"🗑️ Image supprimée: {image_full_path}")
+                # Validation du chemin pour éviter les attaques de traversée de répertoire
+                if '..' in cocktail.image_path or not cocktail.image_path.strip():
+                    log_security_event('PATH_TRAVERSAL_ATTEMPT', f'Tentative de traversée: {cocktail.image_path}')
+                    logger.warning(f"⚠️ Chemin d'image invalide détecté: {cocktail.image_path}")
                 else:
-                    logger.warning(f"⚠️ Image non trouvée: {image_full_path}")
+                    # Construire le chemin complet vers l'image
+                    # Le chemin stocké est relatif (ex: "/cocktail_name.png")
+                    # Le dossier public est dans frontend/public/
+                    image_filename = cocktail.image_path.lstrip('/')
+                    image_full_path = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'frontend', 'public', image_filename
+                    )
+                    
+                    # Vérifier que le fichier existe et le supprimer
+                    if os.path.exists(image_full_path):
+                        os.remove(image_full_path)
+                        image_deleted = True
+                        logger.info(f"🗑️ Image supprimée: {image_full_path}")
+                    else:
+                        logger.warning(f"⚠️ Image non trouvée: {image_full_path}")
                     
             except Exception as img_error:
                 logger.error(f"❌ Erreur lors de la suppression de l'image {cocktail.image_path}: {str(img_error)}")
@@ -293,6 +349,7 @@ def delete_cocktail(cocktail_id):
         }), 500
 
 @app.route('/api/cocktails/generate-image', methods=['POST'])
+@rate_limit(limit=3, window=60)  # 3 générations d'images par minute
 def generate_image():
     """
     Génère une image pour un cocktail spécifique via DynaPictures.
@@ -309,16 +366,20 @@ def generate_image():
         # Validation des données d'entrée
         data = request.get_json()
         if not data or 'cocktail_id' not in data:
+            log_security_event('INVALID_REQUEST', 'ID cocktail manquant pour génération image')
             return jsonify({
                 'success': False,
                 'error': 'L\'ID du cocktail est requis'
             }), 400
         
-        cocktail_id = data['cocktail_id']
-        if not isinstance(cocktail_id, int) or cocktail_id <= 0:
+        # Validation sécurisée de l'ID
+        try:
+            cocktail_id = SecurityValidator.validate_cocktail_id(data['cocktail_id'])
+        except ValueError as e:
+            log_security_event('INVALID_COCKTAIL_ID', f'ID invalide pour génération image: {data["cocktail_id"]}')
             return jsonify({
                 'success': False,
-                'error': 'L\'ID du cocktail doit être un entier positif'
+                'error': str(e)
             }), 400
         
         # Récupération du cocktail depuis la base de données
@@ -372,6 +433,7 @@ def generate_image():
         }), 500
 
 @app.route('/<path:filename>')
+@rate_limit(limit=50, window=60)  # 50 fichiers par minute
 def serve_static_files(filename):
     """
     Sert les fichiers statiques (images) depuis le répertoire frontend/public.
@@ -383,6 +445,22 @@ def serve_static_files(filename):
         File: Fichier statique ou erreur 404
     """
     try:
+        # Validation sécurisée du nom de fichier
+        if '..' in filename or filename.startswith('/') or '\\' in filename:
+            log_security_event('PATH_TRAVERSAL_ATTEMPT', f'Tentative de traversée dans fichier statique: {filename}')
+            return jsonify({
+                'error': 'Nom de fichier invalide'
+            }), 400
+        
+        # Vérification de l'extension de fichier autorisée
+        allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'}
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext not in allowed_extensions:
+            log_security_event('UNAUTHORIZED_FILE_ACCESS', f'Extension non autorisée: {filename}')
+            return jsonify({
+                'error': 'Type de fichier non autorisé'
+            }), 403
+        
         # Chemin vers le répertoire public du frontend
         static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'public')
         return send_from_directory(static_dir, filename)
@@ -394,16 +472,32 @@ def serve_static_files(filename):
 @app.errorhandler(404)
 def not_found(error):
     """Gestionnaire d'erreur 404."""
-    return jsonify({
-        'error': 'Endpoint non trouvé'
-    }), 404
+    log_security_event('NOT_FOUND', f'Endpoint non trouvé: {request.path}')
+    return secure_error_handler(404, 'Endpoint non trouvé')
 
 @app.errorhandler(500)
 def internal_error(error):
     """Gestionnaire d'erreur 500."""
-    return jsonify({
-        'error': 'Erreur interne du serveur'
-    }), 500
+    log_security_event('INTERNAL_ERROR', f'Erreur interne: {str(error)}')
+    return secure_error_handler(500, 'Erreur interne du serveur')
+
+@app.errorhandler(400)
+def bad_request(error):
+    """Gestionnaire d'erreur 400."""
+    log_security_event('BAD_REQUEST', f'Requête invalide: {str(error)}')
+    return secure_error_handler(400, 'Requête invalide')
+
+@app.errorhandler(403)
+def forbidden(error):
+    """Gestionnaire d'erreur 403."""
+    log_security_event('FORBIDDEN', f'Accès interdit: {request.path}')
+    return secure_error_handler(403, 'Accès interdit')
+
+@app.errorhandler(429)
+def rate_limit_exceeded(error):
+    """Gestionnaire d'erreur 429."""
+    log_security_event('RATE_LIMIT_EXCEEDED', f'Limite de taux dépassée: {request.remote_addr}')
+    return secure_error_handler(429, 'Trop de requêtes')
 
 if __name__ == '__main__':
     # Création des tables de base de données
