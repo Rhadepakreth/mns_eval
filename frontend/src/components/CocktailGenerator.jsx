@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import CocktailDetail from './cocktaildetail'
+import CocktailDetail from './CocktailDetail'
 
 const CocktailGenerator = ({ onCocktailGenerated }) => {
   const [prompt, setPrompt] = useState('')
