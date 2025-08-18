@@ -15,7 +15,7 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
 
     try {
       const response = await fetch(
-        `http://localhost:5002/api/cocktails?page=${page}&per_page=${perPage}`
+        `http://localhost:5001/api/cocktails?page=${page}&per_page=${perPage}`
       )
 
       if (!response.ok) {
@@ -63,7 +63,7 @@ const CocktailHistory = ({ refreshTrigger, onViewCocktail }) => {
 
     setDeletingId(cocktailId)
     try {
-      const response = await fetch(`http://localhost:5002/api/cocktails/${cocktailId}`, {
+      const response = await fetch(`http://localhost:5001/api/cocktails/${cocktailId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

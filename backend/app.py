@@ -34,7 +34,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///coc
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Configuration CORS pour permettre les requêtes depuis React
-cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
+cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:5176').split(',')
 CORS(app, origins=cors_origins)
 
 # Initialisation de la base de données
@@ -63,6 +63,35 @@ def health_check():
         'timestamp': datetime.utcnow().isoformat(),
         'service': 'Le Mixologue Augmenté API'
     })
+
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """
+    Endpoint de vérification du statut des services.
+    
+    Returns:
+        dict: Statut des services disponibles
+    """
+    try:
+        # Vérifier la disponibilité du service d'image
+        image_service_available = mistral_service.is_image_service_available()
+        
+        return jsonify({
+            'status': 'operational',
+            'timestamp': datetime.utcnow().isoformat(),
+            'services': {
+                'mistral': True,  # Toujours disponible si l'app démarre
+                'image_service_available': image_service_available,
+                'image_service_type': mistral_service.get_image_service_type() if image_service_available else None
+            }
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification du statut: {e}")
+        return jsonify({
+            'status': 'error',
+            'timestamp': datetime.utcnow().isoformat(),
+            'error': str(e)
+        }), 500
 
 @app.route('/api/cocktails/generate', methods=['POST'])
 def generate_cocktail():
@@ -201,7 +230,7 @@ def get_cocktail(cocktail_id):
 @app.route('/api/cocktails/<int:cocktail_id>', methods=['DELETE'])
 def delete_cocktail(cocktail_id):
     """
-    Supprime un cocktail spécifique par son ID.
+    Supprime un cocktail spécifique par son ID et son image associée.
     
     Args:
         cocktail_id (int): ID du cocktail à supprimer
@@ -211,12 +240,48 @@ def delete_cocktail(cocktail_id):
     """
     try:
         cocktail = Cocktail.query.get_or_404(cocktail_id)
+        
+        # Supprimer l'image associée si elle existe
+        image_deleted = False
+        if cocktail.image_path:
+            try:
+                # Construire le chemin complet vers l'image
+                # Le chemin stocké est relatif (ex: "/cocktail_name.png")
+                # Le dossier public est dans frontend/public/
+                image_filename = cocktail.image_path.lstrip('/')
+                image_full_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    'frontend', 'public', image_filename
+                )
+                
+                # Vérifier que le fichier existe et le supprimer
+                if os.path.exists(image_full_path):
+                    os.remove(image_full_path)
+                    image_deleted = True
+                    logger.info(f"🗑️ Image supprimée: {image_full_path}")
+                else:
+                    logger.warning(f"⚠️ Image non trouvée: {image_full_path}")
+                    
+            except Exception as img_error:
+                logger.error(f"❌ Erreur lors de la suppression de l'image {cocktail.image_path}: {str(img_error)}")
+                # On continue même si la suppression de l'image échoue
+        
+        # Supprimer le cocktail de la base de données
+        cocktail_name = cocktail.name
         db.session.delete(cocktail)
         db.session.commit()
         
+        message = f'Cocktail "{cocktail_name}" supprimé avec succès'
+        if image_deleted:
+            message += ' (image incluse)'
+        elif cocktail.image_path:
+            message += ' (image non trouvée)'
+            
+        logger.info(f"✅ {message}")
+        
         return jsonify({
             'success': True,
-            'message': 'Cocktail supprimé avec succès'
+            'message': message
         })
         
     except Exception as e:
@@ -275,11 +340,15 @@ def generate_image():
         if image_url:
             logger.info(f"Image générée avec succès pour {cocktail.name}: {image_url}")
             
-            # Optionnel: Sauvegarder le chemin de l'image dans la base de données
-            # pour éviter de régénérer à chaque fois
-            if hasattr(cocktail, 'image_path'):
+            # Sauvegarder le chemin de l'image dans la base de données
+            try:
                 cocktail.image_path = image_url
                 db.session.commit()
+                logger.info(f"Chemin d'image sauvegardé pour {cocktail.name}")
+            except Exception as db_error:
+                logger.warning(f"Erreur lors de la sauvegarde du chemin d'image: {db_error}")
+                db.session.rollback()
+                # Continue même si la sauvegarde échoue
             
             return jsonify({
                 'success': True,

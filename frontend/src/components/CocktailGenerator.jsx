@@ -19,7 +19,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
     setGeneratedCocktail(null)
 
     try {
-      const response = await fetch('http://localhost:5002/api/cocktails/generate', {
+      const response = await fetch('http://localhost:5001/api/cocktails/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ const CocktailGenerator = ({ onCocktailGenerated }) => {
           
           <h1 className="text-[clamp(6rem,13vw,14rem)] font-elegant text-white yesteryear-regular">
             <span className="block text-center">
-              <span className="relative inline-block transform -translate-x-10">
+              <span className="relative block transform -translate-x-10">
                 <span className="text-[clamp(2rem,5vw,6rem)] mr-2 inline-block transform -translate-y-8">Le </span>Mixologue
               </span>
               <span className="block transform -translate-y-[10.5vw] translate-x-[8.2vw] text-[clamp(4rem,9vw,8rem)]"><span className='text-[clamp(5rem,12vw,10rem)] inline-block transform translate-x-[1vw] translate-y-[1vw]'>🍹</span>Augmenté</span>

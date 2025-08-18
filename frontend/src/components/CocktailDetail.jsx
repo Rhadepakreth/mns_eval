@@ -44,7 +44,7 @@ const CocktailDetail = ({ cocktail, onBack, source = 'history' }) => {
     setImageError(null)
     
     try {
-      const response = await fetch('http://localhost:5002/api/cocktails/generate-image', {
+      const response = await fetch('http://localhost:5001/api/cocktails/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

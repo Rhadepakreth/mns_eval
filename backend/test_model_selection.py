@@ -18,7 +18,7 @@ def test_model_selection_and_generation():
     
     # Test de génération d'image pour un cocktail existant
     cocktail_id = 16
-    url = 'http://localhost:5002/api/cocktails/generate-image'
+    url = 'http://localhost:5001/api/cocktails/generate-image'
     
     print(f"\n🍹 Test de génération d'image pour le cocktail ID: {cocktail_id}")
     print(f"📡 URL: {url}")

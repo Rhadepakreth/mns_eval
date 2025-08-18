@@ -48,13 +48,19 @@ class MistralService:
         self.timeout = 30  # Timeout en secondes
         self.max_retries = 3
         
-        # Initialisation du service DynaPictures pour la génération d'images
+        # Initialisation du service de génération d'images
         try:
             self.dynapictures_service = DynaPicturesService()
-            logger.info("Service DynaPictures initialisé avec succès")
+            logger.info("✅ Service DynaPictures initialisé avec succès")
         except ValueError as e:
-            logger.warning(f"Service DynaPictures non disponible: {e}")
+            logger.warning(f"⚠️ Service DynaPictures non disponible: {e}")
             self.dynapictures_service = None
+        
+        # Résumé des services disponibles
+        if self.dynapictures_service:
+            logger.info("🎨 Service d'image disponible: DynaPictures (Local)")
+        else:
+            logger.warning("⚠️ Aucun service de génération d'image disponible - utilisation d'images par défaut")
         
         logger.info(f"Service Mistral initialisé avec le modèle: {self.model}")
     
@@ -80,7 +86,7 @@ Pour chaque demande, tu dois générer une fiche cocktail complète au format JS
   ],
   "description": "Histoire courte et engageante du cocktail (2-3 phrases max)",
   "music_ambiance": "Suggestion d'ambiance musicale adaptée au cocktail",
-  "image_prompt": "Prompt détaillé pour générer une image du cocktail avec SDXL,précise que le verre doit être visible entièrement et le background noir (60 tokens max)"
+  "image_prompt": "Prompt détaillé pour générer une image du cocktail avec SDXL, précise que le verre doit être visible entièrement et le background doit être noir (100 tokens max)"
 }
 
 Règles importantes :
@@ -343,14 +349,50 @@ hyper-réaliste, 4K, composition esthétique
             Optional[str]: Chemin relatif de l'image générée ou None
         """
         if not cocktail_data:
-            logger.error("Données de cocktail manquantes pour la génération d'image")
+            logger.error("❌ Données de cocktail manquantes pour la génération d'image")
             return None
         
-        # Utiliser DynaPictures si disponible
-        if self.dynapictures_service:
-            logger.info("Génération d'image avec DynaPictures")
-            return self.dynapictures_service.generate_cocktail_image(cocktail_data)
+        cocktail_name = cocktail_data.get('name', 'Cocktail Inconnu')
+        logger.info(f"🎨 Génération d'image pour: {cocktail_name}")
         
-        # Fallback: générer une image par défaut
-        logger.warning("Service DynaPictures non disponible, utilisation de l'image par défaut")
+        # Génération avec DynaPictures
+        if self.dynapictures_service:
+            logger.info("🎨 Génération avec DynaPictures...")
+            result = self.dynapictures_service.generate_cocktail_image(cocktail_data)
+            if result:
+                logger.info(f"✅ Image générée avec DynaPictures: {result}")
+                return result
+            else:
+                logger.warning("⚠️ Échec de génération avec DynaPictures")
+        
+        # Fallback: image par défaut
+        logger.warning("⚠️ Service de génération non disponible, utilisation de l'image par défaut")
         return "/default.webp"
+    
+    def is_image_service_available(self) -> bool:
+        """
+        Vérifie si un service de génération d'images est disponible.
+        
+        Returns:
+            bool: True si un service d'image est disponible, False sinon
+        """
+        try:
+            return self.dynapictures_service and self.dynapictures_service.is_available()
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification du service d'image: {e}")
+            return False
+    
+    def get_image_service_type(self) -> Optional[str]:
+        """
+        Retourne le type de service d'image actuellement utilisé.
+        
+        Returns:
+            Optional[str]: Le nom du service d'image ou None si aucun n'est disponible
+        """
+        try:
+            if self.dynapictures_service and self.dynapictures_service.is_available():
+                return "DynaPictures (Local)"
+            return None
+        except Exception as e:
+            logger.error(f"Erreur lors de la détermination du type de service d'image: {e}")
+            return None
