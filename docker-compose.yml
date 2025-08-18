@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Service Backend Flask
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mixologue_backend
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=False
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - DYNAPICTURES_API_KEY=${DYNAPICTURES_API_KEY}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+    volumes:
+      - ./backend/cocktails.db:/app/cocktails.db
+      - ./backend/static:/app/static
+    networks:
+      - mixologue_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Service Frontend React/Vite avec Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mixologue_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - mixologue_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Service optionnel: Base de données PostgreSQL (pour une version plus robuste)
+  # Décommentez si vous souhaitez migrer de SQLite vers PostgreSQL
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: mixologue_db
+  #   environment:
+  #     POSTGRES_DB: mixologue
+  #     POSTGRES_USER: mixologue_user
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-change-this-password}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - mixologue_network
+  #   restart: unless-stopped
+
+networks:
+  mixologue_network:
+    driver: bridge
+    name: mixologue_network
+
+volumes:
+  # Volume pour PostgreSQL (décommentez si vous utilisez PostgreSQL)
+  # postgres_data:
+  #   driver: local
+  
+  # Volume pour les fichiers statiques partagés
+  static_files:
+    driver: local
